@@ -1,9 +1,13 @@
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, FeatureGroup } from "react-leaflet";
+import { MapContainer, TileLayer, FeatureGroup, useMap } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 import "leaflet-draw/dist/leaflet.draw.css";
 import L from "leaflet";
+import  parseGeoraster from "georaster";
+import GeoRasterLayer from "georaster-layer-for-leaflet";
+
 
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -17,17 +21,64 @@ L.Icon.Default.mergeOptions({
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.1/images/marker-shadow.png",
 });
 
-function App() {
-  
+function GeoTiffLayer({ file }) {
+  const map = useMap();
 
+  useEffect(() => {
+    if (!file) return;
+
+    const loadGeoTiff = async () => {
+      try {
+        const fileReader = new FileReader();
+        fileReader.onload = async (event) => {
+          const arrayBuffer = event.target.result;
+          const georaster = await parseGeoraster(arrayBuffer);
+
+          const geoRasterLayer = new GeoRasterLayer({
+            georaster,
+            opacity: 0.7,
+            pixelValuesToColorFn: (value) => {
+              if (value < 50) return "yellow";
+              if (value > 50 && value < 130) return "green";
+              if (value < 130 && value > 180) return "#93E9BE";
+              if (value === 190) return "red";
+              if (value === 200) return "#966400";
+              if (value === 210) return "blue";
+              if (value === 220) return "#ffffff";
+              return "transparent";
+            },
+            resolution: 128, // Adjust the resolution
+          });
+
+          geoRasterLayer.addTo(map);
+          map.fitBounds(geoRasterLayer.getBounds());
+        };
+
+        fileReader.readAsArrayBuffer(file);
+      } catch (error) {
+        console.error("Error loading GeoTIFF:", error);
+      }
+    };
+
+    loadGeoTiff();
+  }, [file, map]);
+
+  return null;
+}
+
+function App() {
+  const [file, setFile] = useState(null);
+
+  const handleFileChange = (event) => {
+    setFile(event.target.files[0]);
+  };
 
   const _created = (e) => {
-    const layer = e.layer; // The created layer (marker, rectangle, polygon, etc.)
+    const layer = e.layer;
     if (layer instanceof L.Marker) {
-      const { lat, lng } = layer.getLatLng(); // Get latitude and longitude
-      layer.bindPopup("Loading information...").openPopup(); // Initial popup content
+      const { lat, lng } = layer.getLatLng();
+      layer.bindPopup("Loading information...").openPopup();
 
-      // Fetch data from GeoNames API using lat and lng
       fetch(
         `https://api.opencagedata.com/geocode/v1/json?q=${lat},${lng}&key=67ce3a9c73234561bc3bedeeaa41afc9`
       )
@@ -60,24 +111,39 @@ function App() {
         });
     }
   };
-  
 
   return (
-    
-      <MapContainer
-        center={[48.8566, 2.3522]}
-        zoom={13}
-        
-      >
-        <FeatureGroup>
-          <EditControl position="topright" onCreated={_created} />
-        </FeatureGroup>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-      </MapContainer>
-    
+    <div style={{ position: "relative" }}>
+  <MapContainer center={[28.3949, 84.124]} zoom={7} style={{ height: "80vh", zIndex: 0 }}>
+    {file && <GeoTiffLayer file={file} />}
+    <FeatureGroup>
+      <EditControl position="topright" onCreated={_created} />
+    </FeatureGroup>
+    <TileLayer
+      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    />
+  </MapContainer>
+
+  <input
+    type="file"
+    accept=".tif"
+    onChange={handleFileChange}
+    style={{
+      position: "absolute",
+      top: "80px",
+      left: "10px",
+      zIndex: 1000,
+      padding: "10px",
+      backgroundColor: "white",
+      border: "1px solid #ccc",
+      borderRadius: "10px",
+      
+
+    }}
+  />
+</div>
+
   );
 }
 
